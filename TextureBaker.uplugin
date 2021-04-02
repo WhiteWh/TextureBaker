@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "TextureBaker",
+	"Description": "Bake texture using custom rules",
+	"Category": "Other",
+	"CreatedBy": "WhiteWh & C4tnt",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "TextureBaker",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}
