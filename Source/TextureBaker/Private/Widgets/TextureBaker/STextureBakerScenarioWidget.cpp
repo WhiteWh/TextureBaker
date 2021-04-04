@@ -124,6 +124,7 @@ void STextureBakerScenarioWidget::Construct(const FArguments& InArgs)
 					.IsEnabled(this, &STextureBakerScenarioWidget::IsBakerTemplateAvailable)
 					.ForegroundColor(FLinearColor::White)
 					.ContentPadding(FMargin(6, 0))
+					.OnClicked(this, &STextureBakerScenarioWidget::OnStartBake)
 					[
 						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot()
@@ -223,9 +224,12 @@ void STextureBakerScenarioWidget::Construct(const FArguments& InArgs)
 							.HeaderRow
 							(
 								SNew(SHeaderRow)
+								+ SHeaderRow::Column(STextureBakerOutputDeclListItem::NAME_OutputButtons)
+								.DefaultLabel(LOCTEXT("OutputButtons", ""))
+								.FillWidth(.05f)
 								+ SHeaderRow::Column(STextureBakerOutputDeclListItem::NAME_OutputName)
 								.DefaultLabel(LOCTEXT("OutputName", "Output name"))
-								.FillWidth(.15f)
+								.FillWidth(.10f)
 								+ SHeaderRow::Column(STextureBakerOutputDeclListItem::NAME_OutputPath)
 								.DefaultLabel(LOCTEXT("OutputPath", "Save path"))
 								.FillWidth(.50f)
@@ -259,6 +263,8 @@ void STextureBakerScenarioWidget::HandleOutputPathCommitted(const FText& NewText
 void STextureBakerScenarioWidget::HandleOutputPathCommitted(const FString& NewPath)
 {
 	OutputDirectoryPath = NewPath;
+	FPaths::NormalizeDirectoryName(OutputDirectoryPath);
+	OutputDirectoryPath.AppendChar(TCHAR('/'));
 	UpdateOutputInfo();
 }
 
@@ -313,6 +319,28 @@ void STextureBakerScenarioWidget::OnUsePathFromContentBrowser()
 	{
 		HandleOutputPathCommitted(NewPath);
 	}
+}
+
+FReply STextureBakerScenarioWidget::OnStartBake()
+{
+	if (IsBakerTemplateAvailable())
+	{
+		/* Initialize new render context */
+		TUniquePtr<FTextureBakerRenderContext> NewRenderContext = MakeUnique<FTextureBakerRenderContext>(TextureBakerScenarioTemplate, OutputDirectoryPath);
+		
+		/* Setup output list to bake */
+		for (TSharedPtr<FTextureRepackOutputDecl> WidgetDecl : RegisteredOutputDecls)
+		{
+			if (WidgetDecl->IsOutputEnabled())
+			{
+				NewRenderContext->AddOutputToRender(WidgetDecl->GetOutputFName());
+			}
+		}
+
+		/* Push bakery context */
+		FTextureBakerModule::GetChecked().ExecuteBakerRenderContext(MoveTemp(NewRenderContext));
+	}
+	return FReply::Handled();
 }
 
 FReply STextureBakerScenarioWidget::OnPickContent()
@@ -412,7 +440,9 @@ void STextureBakerScenarioWidget::UpdateOutputInfo()
 	}
 	for (FTextureBakerOutputWriteout& Writeout : Outputs)
 	{
-		RegisteredOutputDecls.Add(MakeShared<FTextureRepackOutputDecl>(Writeout, true, NAME_None, Writeout.OutputAssetPath));
+		FString OutputRelativePath = Writeout.OutputAssetPath;
+		FPaths::MakePathRelativeTo(OutputRelativePath, *OutputDirectoryPath);
+		RegisteredOutputDecls.Add(MakeShared<FTextureRepackOutputDecl>(Writeout, true, Writeout.GetOutputName(), OutputRelativePath));
 	}
 	if (OutputDeclList.IsValid())
 	{
@@ -437,6 +467,7 @@ bool STextureBakerScenarioWidget::IsBakerTemplateAvailable() const
 }
 
 
+FName STextureBakerOutputDeclListItem::NAME_OutputButtons(TEXT("OutputButtons"));
 FName STextureBakerOutputDeclListItem::NAME_OutputName(TEXT("OutputName"));
 FName STextureBakerOutputDeclListItem::NAME_OutputPath(TEXT("OutputPath"));
 FName STextureBakerOutputDeclListItem::NAME_OutputInfo(TEXT("OutputInfo"));

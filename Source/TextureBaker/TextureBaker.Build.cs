@@ -45,6 +45,7 @@ public class TextureBaker : ModuleRules
 				"PropertyEditor",
 				"EditorStyle",
 				"ClassViewer",
+				"RHI",
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

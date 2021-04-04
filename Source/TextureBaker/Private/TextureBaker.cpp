@@ -10,6 +10,11 @@
 #include "Widgets/Input/SComboBox.h"
 #include "ToolMenus.h"
 #include "Widgets/TextureBaker/STextureBakerScenarioWidget.h"
+#include "Misc/ScopedSlowTask.h"
+#include "AssetToolsModule.h"
+#include "PackageTools.h"
+#include "ObjectTools.h"
+#include "AssetRegistryModule.h"
 
 static const FName TextureBakerTabName("TextureBaker");
 
@@ -97,6 +102,158 @@ void FTextureBakerModule::RegisterMenus()
 			}
 		}
 	}
+}
+
+void FTextureBakerModule::ExecuteBakerRenderContext(TUniquePtr<FTextureBakerRenderContext> Context)
+{
+	FScopedSlowTask Feedback(Context->GetOutputsToBake().Num() + 1, NSLOCTEXT("TextureBaker", "TextureBaker_BakeTexture", "Bake requested textures..."));
+	Feedback.MakeDialog(true);
+
+	/* Prepare for baking */
+	{
+		Feedback.EnterProgressFrame();
+		Context->PrepareToBakeOutputs();
+	}
+
+	/* Bake each output */
+	for (const FName& OutputName : Context->GetOutputsToBake())
+	{
+		Context->EnterRenderScope();
+		Feedback.EnterProgressFrame();
+		const FTextureBakerRenderResult& Result = Context->BakeOutput(OutputName);
+		if (Result.IsValid())
+		{
+			SaveBakedTextureResult(Result, true);
+		}
+		Context->ExitRenderScope();
+	}
+}
+
+void FTextureBakerModule::SaveBakedTextureResult(const FTextureBakerRenderResult& Result, bool bOverrideExistingFiles)
+{
+	if (Result.IsValid())
+	{
+		FString AssetLongPackageName = Result.GetPackagePath();
+		const FString PackagePath = FPackageName::GetLongPackagePath(AssetLongPackageName);
+		const FString BaseAssetName = FPackageName::GetLongPackageAssetName(AssetLongPackageName);
+		FString SanitizedBaseAssetName = ObjectTools::SanitizeObjectName(BaseAssetName);
+
+		if (!bOverrideExistingFiles)
+		{
+			IAssetTools& AssetTools = FModuleManager::Get().LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
+			AssetTools.CreateUniqueAssetName(AssetLongPackageName, TEXT(""), AssetLongPackageName, SanitizedBaseAssetName);
+		}
+
+		UPackage* PackageToSaveTexture = UPackageTools::FindOrCreatePackageForAssetType(*AssetLongPackageName, UTexture2D::StaticClass());
+		UTextureRenderTarget2D* RenderTarget = Result.GetTextureRenderTarget();
+
+		if (PackageToSaveTexture && RenderTarget)
+		{
+			UTexture2D* Texture = NewObject<UTexture2D>(PackageToSaveTexture, *BaseAssetName, RenderTarget->GetMaskedFlags() | RF_Public | RF_Standalone);
+			check(Texture);
+
+			Texture->CompressionSettings = Result.GetInfo().CompressionSettings;
+			Texture->MipGenSettings = Result.GetInfo().MipGenSettings;
+			Texture->CompressionNoAlpha = Result.GetInfo().bCompressWithoutAlpha;
+			WriteTexture2DSourceArt(Texture, Result.GetInfo().OutputImageFormat, RenderTarget, 0);
+
+			Texture->MarkPackageDirty();
+
+			// Notify the asset registry
+			FAssetRegistryModule::AssetCreated(Texture);
+		}
+	}
+}
+
+void FTextureBakerModule::WriteTexture2DSourceArt(UTexture2D* InTexture2D, ETextureSourceFormat InTextureFormat, UTextureRenderTarget2D* SourceRT, uint32 Flags)
+{
+	if (InTexture2D && SourceRT)
+	{
+		
+		
+		InTexture2D->ForceRebuildPlatformData();
+		InTexture2D->UpdateResource();
+	}
+}
+
+ETextureRenderTargetFormat FTextureBakerModule::SelectRenderTargetFormatForPixelFormat(EPixelFormat PixelFormat, bool sRGB)
+{
+	switch (PixelFormat)
+	{
+	case PF_G8: return RTF_R8;
+	case PF_R8G8: return RTF_RG8;
+	case PF_B8G8R8A8: return sRGB ? RTF_RGBA8_SRGB : RTF_RGBA8;
+
+	case PF_R16F: return RTF_R16f;
+	case PF_G16R16F: return RTF_RG16f;
+	case PF_FloatRGBA: return RTF_RGBA16f;
+
+	case PF_R32_FLOAT: return RTF_R32f;
+	case PF_G32R32F: return RTF_RG32f;
+	case PF_A32B32G32R32F: return RTF_RGBA32f;
+	case PF_A2B10G10R10: return RTF_RGB10A2;
+
+	case PF_DXT1:
+	case PF_DXT3:
+		return RTF_R8;
+
+	case PF_DXT5:
+		return sRGB ? RTF_RGBA8_SRGB : RTF_RGBA8;
+
+	case PF_BC5:
+	case PF_BC7:
+		return sRGB ? RTF_RGBA8_SRGB : RTF_RGBA8;
+
+	}
+	return sRGB ? RTF_RGBA8_SRGB : RTF_RGBA8;
+}
+
+ETextureRenderTargetFormat FTextureBakerModule::SelectRenderTargetFormatForImageSourceFormat(ETextureSourceFormat OutputImageFormat, bool bUseSRGB)
+{
+	switch (OutputImageFormat)
+	{
+	case ETextureSourceFormat::TSF_BGRA8:
+	case ETextureSourceFormat::TSF_RGBA8:
+		return bUseSRGB ? ETextureRenderTargetFormat::RTF_RGBA8_SRGB : ETextureRenderTargetFormat::RTF_RGBA8;
+	case ETextureSourceFormat::TSF_BGRE8:
+	case ETextureSourceFormat::TSF_RGBE8:
+		return ETextureRenderTargetFormat::RTF_RGBA16f;
+	case ETextureSourceFormat::TSF_G8:
+		return ETextureRenderTargetFormat::RTF_R8;
+	case ETextureSourceFormat::TSF_G16:
+		return ETextureRenderTargetFormat::RTF_R16f;
+	case ETextureSourceFormat::TSF_RGBA16:
+	case ETextureSourceFormat::TSF_RGBA16F:
+		return ETextureRenderTargetFormat::RTF_RGBA16f;
+	default:
+		return ETextureRenderTargetFormat::RTF_RGBA8;
+	}
+}
+
+ETextureSourceFormat FTextureBakerModule::SelectImageSourceFormatForRenderTargetFormat(ETextureRenderTargetFormat RTFormat)
+{
+	switch (RTFormat)
+	{
+	case ETextureRenderTargetFormat::RTF_R8: 
+		return ETextureSourceFormat::TSF_G8;
+
+	case ETextureRenderTargetFormat::RTF_R16f:
+	case ETextureRenderTargetFormat::RTF_R32f: 
+		return ETextureSourceFormat::TSF_G16;
+
+	case ETextureRenderTargetFormat::RTF_RG16f:
+	case ETextureRenderTargetFormat::RTF_RG32f:
+	case ETextureRenderTargetFormat::RTF_RGBA16f:
+	case ETextureRenderTargetFormat::RTF_RGBA32f: 
+		return ETextureSourceFormat::TSF_RGBA16F;
+
+	case ETextureRenderTargetFormat::RTF_RG8:
+	case ETextureRenderTargetFormat::RTF_RGB10A2:
+	case ETextureRenderTargetFormat::RTF_RGBA8:
+	case ETextureRenderTargetFormat::RTF_RGBA8_SRGB:
+		return ETextureSourceFormat::TSF_BGRA8;
+	}
+	return ETextureSourceFormat::TSF_BGRA8;
 }
 
 #undef LOCTEXT_NAMESPACE

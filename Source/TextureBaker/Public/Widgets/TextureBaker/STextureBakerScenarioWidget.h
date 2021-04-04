@@ -18,6 +18,8 @@ public:
 	FTextureRepackOutputDecl(const FTextureRepackOutputDecl& Lhs) : bOutputEnabled(Lhs.bOutputEnabled), OutputName(Lhs.OutputName), OutputPath(Lhs.OutputPath), DetailedInfo(Lhs.DetailedInfo) {}
 	FTextureRepackOutputDecl(const FTextureBakerOutputInfo& Info, bool bEnabled, FName Name, const FString& Path) : bOutputEnabled(bEnabled), OutputName(Name), OutputPath(Path), DetailedInfo(Info) {}
 
+	FName GetOutputFName() const { return OutputName; }
+
 	bool IsOutputEnabled() const { return bOutputEnabled; }
 	FText GetOutputName() const { return FText::FromName(OutputName); }
 	FText GetOutputPath() const { return FText::FromString(OutputPath); }
@@ -34,6 +36,7 @@ typedef TSharedPtr<FTextureRepackOutputDecl> FTextureRepackOutputDeclPtr;
 class STextureBakerOutputDeclListItem : public SMultiColumnTableRow<FTextureRepackOutputDeclPtr>
 {
 public:
+	static FName NAME_OutputButtons;
 	static FName NAME_OutputName;
 	static FName NAME_OutputPath;
 	static FName NAME_OutputInfo;
@@ -91,6 +94,7 @@ public:
 
 
 	FReply OnPickContent();
+	FReply OnStartBake();
 	const FSlateBrush* GetCurrentScenarioIcon() const;
 	bool IsBakerTemplateAvailable() const;
 	void HandleOutputPathCommitted(const FText& NewText, ETextCommit::Type CommitInfo);
