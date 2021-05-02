@@ -3,16 +3,9 @@
 #include "CoreMinimal.h"
 #include "Templates/SharedPointer.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Renderer/TextureBakerRenderTypes.h"
 
 class FTextureBakerRenderScope;
-
-class TEXTUREBAKER_API ITextureBakerRTPool
-{
-public:
-	virtual UTextureRenderTarget2D* GetOrCreateRT(const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format) = 0;
-	virtual UCanvas* GetOrCreateCanvas() = 0;
-	virtual bool ReleaseObject(UObject* Object) = 0;
-};
 
 class TEXTUREBAKER_API FTextureBakerDrawTarget
 {
@@ -22,12 +15,14 @@ public:
 	void InitializeCanvasObject(UCanvas* Canvas);
 	UTexture2D* Resolve(FTextureBakerRenderScope* InRenderScope);
 	void Discard(FTextureBakerRenderScope* InRenderScope);
+	void WaitDrawCompletion();
 
 	UTextureRenderTarget2D*		ReleaseRT();
 
 private:
 	UTextureRenderTarget2D*		RenderTargetObject;
 	FCanvas						RenderCanvas;
+	FDrawEvent*					DrawEvent;
 };
 
 class TEXTUREBAKER_API FSavedTextureStreamingState
@@ -56,8 +51,9 @@ public:
 
 	ITextureBakerRTPool* GetRenderTargetPool() const;
 	UTextureRenderTarget2D* CreateTemporaryRT(const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor, bool bAutoGenerateMipMaps);
-	UTexture2D* CreateTemporaryTexture(UTexture2D* SourceTexture, const FIntPoint& InTargetSize, TextureMipGenSettings MipFilter, TextureMipGenSettings MagFilter);
+	UTexture2D* ConditionallyCreateDerivedArt(UTexture2D* SourceTexture, const FTextureBakerResourceRequirements& Options, ETBDerivedArtMode Mode = ETBDerivedArtMode::None);
 	UTexture2D* CreateTemporaryTexture(UTextureRenderTarget2D* SourceRT, TextureMipGenSettings MipFilter);
+	UTexture2D* CreateTemporaryTexture(const FTextureBakerOutputInfo& TextureInfo, ETextureSourceFormat InDataFormat, const void* Data);
 	UCanvas* CreateTemporaryDrawRT(const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor, bool bAutoGenerateMipMaps);
 	UTexture2D* ResolveTemporaryDrawRT(UCanvas* DrawTarget);
 	UTextureRenderTarget2D* ResolveTemporaryDrawRT_AsRenderTarget(UCanvas* DrawTarget);

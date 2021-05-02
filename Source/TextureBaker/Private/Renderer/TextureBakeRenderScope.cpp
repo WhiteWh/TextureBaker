@@ -1,11 +1,13 @@
 #include "Renderer/TextureBakerRenderScope.h"
 #include "TextureBaker.h"
 #include "Engine/Canvas.h"
+#include "ClearQuad.h"
 
 FTextureBakerDrawTarget::FTextureBakerDrawTarget(UTextureRenderTarget2D* RenderTarget, ERHIFeatureLevel::Type FeatureLevel ) :
-	RenderTargetObject(RenderTarget), RenderCanvas(RenderTarget->GetRenderTargetResource(), nullptr, FApp::GetCurrentTime() - GStartTime, FApp::GetDeltaTime(), FApp::GetCurrentTime() - GStartTime, FeatureLevel)
+	RenderTargetObject(RenderTarget), 
+	RenderCanvas(RenderTarget->GameThread_GetRenderTargetResource(), nullptr, FApp::GetCurrentTime() - GStartTime, FApp::GetDeltaTime(), FApp::GetCurrentTime() - GStartTime, FeatureLevel),
+	DrawEvent(nullptr)
 {
-
 }
 
 void FTextureBakerDrawTarget::AddReferencedObjects(FReferenceCollector& Collector)
@@ -15,17 +17,56 @@ void FTextureBakerDrawTarget::AddReferencedObjects(FReferenceCollector& Collecto
 
 void FTextureBakerDrawTarget::InitializeCanvasObject(UCanvas* Canvas)
 {
+	WaitDrawCompletion();
 	Canvas->Init(RenderTargetObject->GetSurfaceWidth(), RenderTargetObject->GetSurfaceHeight(), nullptr, &RenderCanvas);
+	Canvas->Update();
+	DrawEvent = new FDrawEvent();
+
+	FName RTName = RenderTargetObject->GetFName();
+	FDrawEvent* LocalDrawEvent = DrawEvent;
+	FTextureRenderTargetResource* RenderTargetResource = RenderTargetObject->GameThread_GetRenderTargetResource();
+	ENQUEUE_RENDER_COMMAND(BeginDrawEventCommand)(
+		[RTName, LocalDrawEvent, RenderTargetResource](FRHICommandListImmediate& RHICmdList)
+		{
+			RenderTargetResource->FlushDeferredResourceUpdate(RHICmdList);
+
+			BEGIN_DRAW_EVENTF(
+				RHICmdList,
+				DrawCanvasToTarget,
+				(*LocalDrawEvent),
+				*RTName.ToString());
+		});
+}
+
+void FTextureBakerDrawTarget::WaitDrawCompletion()
+{
+	if (DrawEvent && RenderTargetObject)
+	{
+		FTextureRenderTargetResource* RenderTargetResource = RenderTargetObject->GameThread_GetRenderTargetResource();
+		FDrawEvent* LocalDrawEvent = DrawEvent;
+		ENQUEUE_RENDER_COMMAND(CanvasRenderTargetResolveCommand)(
+			[RenderTargetResource, LocalDrawEvent](FRHICommandList& RHICmdList)
+			{
+				RHICmdList.CopyToResolveTarget(RenderTargetResource->GetRenderTargetTexture(), RenderTargetResource->TextureRHI, FResolveParams());
+				STOP_DRAW_EVENT((*LocalDrawEvent));
+				delete LocalDrawEvent;
+			}
+		);
+	}
+	else if (DrawEvent)
+	{
+		// Draw event have never been pushed to a render thread command list, so we have to remove it manually
+		delete DrawEvent;
+		DrawEvent = nullptr;
+	}
 }
 
 UTexture2D* FTextureBakerDrawTarget::Resolve(FTextureBakerRenderScope* InRenderScope)
 {
-	if (RenderTargetObject)
+	if (UTextureRenderTarget2D* ReleasedRT = ReleaseRT())
 	{
-		RenderCanvas.Flush_GameThread();
-		RenderTargetObject->UpdateResourceImmediate(false);
-		UTexture2D* OutTexture = InRenderScope->CreateTemporaryTexture(RenderTargetObject, TextureMipGenSettings::TMGS_NoMipmaps);
-		InRenderScope->ReleaseTemporaryResource(RenderTargetObject);
+		UTexture2D* OutTexture = InRenderScope->CreateTemporaryTexture(ReleasedRT, TextureMipGenSettings::TMGS_NoMipmaps);
+		InRenderScope->ReleaseTemporaryResource(ReleasedRT);
 		return OutTexture;
 	}
 	return nullptr;
@@ -35,8 +76,7 @@ void FTextureBakerDrawTarget::Discard(FTextureBakerRenderScope* InRenderScope)
 {
 	if (RenderTargetObject)
 	{
-		RenderCanvas.Flush_GameThread();
-		RenderTargetObject->UpdateResourceImmediate(false);
+		WaitDrawCompletion();
 		InRenderScope->ReleaseTemporaryResource(RenderTargetObject);
 	}
 }
@@ -46,7 +86,7 @@ UTextureRenderTarget2D* FTextureBakerDrawTarget::ReleaseRT()
 	if (RenderTargetObject)
 	{
 		RenderCanvas.Flush_GameThread();
-		RenderTargetObject->UpdateResourceImmediate(false);
+		WaitDrawCompletion();
 		
 		UTextureRenderTarget2D* Result = RenderTargetObject;
 		RenderTargetObject = nullptr;
@@ -127,6 +167,17 @@ bool FTextureBakerRenderScope::IsTextureSetToBeResident(UTexture2D* Texture)
 	return false;
 }
 
+UTexture2D* FTextureBakerRenderScope::CreateTemporaryTexture(const FTextureBakerOutputInfo& TextureInfo, ETextureSourceFormat InDataFormat, const void* Data)
+{
+	if (UTexture2D* OutTexture = UTexture2D::CreateTransient(TextureInfo.OutputDimensions.X, TextureInfo.OutputDimensions.Y, TextureInfo.GetPixelFormat()))
+	{
+		TextureInfo.SetTextureAttributes(OutTexture);
+		TemporaryTextures.Add(OutTexture);
+		return OutTexture;
+	}
+	return nullptr;
+}
+
 UTexture2D* FTextureBakerRenderScope::CreateTemporaryTexture(UTextureRenderTarget2D* SourceRT, TextureMipGenSettings MipFilter)
 {
 	if (SourceRT)
@@ -139,8 +190,9 @@ UTexture2D* FTextureBakerRenderScope::CreateTemporaryTexture(UTextureRenderTarge
 			FIntPoint InTargetSize = FIntPoint(SourceRT->SizeX, SourceRT->SizeY);
 			if (UTexture2D* OutTexture = UTexture2D::CreateTransient(InTargetSize.X, InTargetSize.Y, PixelFormat))
 			{
-				UTextureRenderTarget2D* CopyBuffer = RTPool->GetOrCreateRT(InTargetSize, RTFormat);
-				FTextureBakerModule::GetChecked().WriteTexture2DSourceArt(OutTexture, ImageFormat, CopyBuffer, 0);
+				OutTexture->MipGenSettings = MipFilter;
+				FTextureBakerModule::GetChecked().WriteTexture2DSourceArt(OutTexture, ImageFormat, SourceRT, 0);
+				TemporaryTextures.Add(OutTexture);
 				return OutTexture;
 			}
 		}
@@ -148,23 +200,24 @@ UTexture2D* FTextureBakerRenderScope::CreateTemporaryTexture(UTextureRenderTarge
 	return nullptr;
 }
 
-UTexture2D* FTextureBakerRenderScope::CreateTemporaryTexture(UTexture2D* SourceTexture, const FIntPoint& InTargetSize, TextureMipGenSettings MipFilter, TextureMipGenSettings MagFilter)
+UTexture2D* FTextureBakerRenderScope::ConditionallyCreateDerivedArt(UTexture2D* SourceTexture, const FTextureBakerResourceRequirements& Options, ETBDerivedArtMode Mode)
 {
-	if (SourceTexture && InTargetSize.GetMin() > 0 && InTargetSize.GetMax() <= 4096)
+	if (SourceTexture)
 	{
-		if (ITextureBakerRTPool* RTPool = GetRenderTargetPool())
+		if (!EnumHasAllFlags(Mode, ETBDerivedArtMode::AlwaysCreate) && Options.IsSatisfiedByTexture(SourceTexture, SourceTexture->Source))
 		{
-			EPixelFormat Format = SourceTexture->GetPixelFormat();
-			if (UTexture2D* OutTexture = UTexture2D::CreateTransient(InTargetSize.X, InTargetSize.Y, Format))
+			return SourceTexture;
+		}
+		else if (ITextureBakerRTPool* RTPool = GetRenderTargetPool())
+		{
+			if (UTexture2D* DerivedArt = RTPool->GetOrCreateDerivedArt(SourceTexture, Options))
 			{
-				ETextureRenderTargetFormat RTFormat = FTextureBakerModule::SelectRenderTargetFormatForPixelFormat(Format, SourceTexture->SRGB);
-				UTextureRenderTarget2D* CopyBuffer = RTPool->GetOrCreateRT(InTargetSize, RTFormat);
-				FTextureBakerModule::GetChecked().WriteTexture2DSourceArt(OutTexture, SourceTexture->Source.GetFormat(), CopyBuffer, 0);
-				return OutTexture;
+				TemporaryTextures.Add(DerivedArt);
+				return DerivedArt;
 			}
 		}
 	}
-	return nullptr;
+	return EnumHasAllFlags(Mode, ETBDerivedArtMode::Failsafe) ? SourceTexture : nullptr;
 }
 
 UTextureRenderTarget2D* FTextureBakerRenderScope::CreateTemporaryRT(const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor, bool bAutoGenerateMipMaps)
@@ -172,6 +225,7 @@ UTextureRenderTarget2D* FTextureBakerRenderScope::CreateTemporaryRT(const FIntPo
 	if (ITextureBakerRTPool* RTPool = GetRenderTargetPool())
 	{
 		UTextureRenderTarget2D* AllocatedRT = RTPool->GetOrCreateRT(InTargetSize, Format);
+		check(AllocatedRT);
 		AllocatedRT->ClearColor = ClearColor;
 		AllocatedRT->bAutoGenerateMips = bAutoGenerateMipMaps;
 		return AllocatedRT;
@@ -184,12 +238,26 @@ UCanvas* FTextureBakerRenderScope::CreateTemporaryDrawRT(const FIntPoint& InTarg
 	if (ITextureBakerRTPool* RTPool = GetRenderTargetPool())
 	{
 		UTextureRenderTarget2D* AllocatedRT = RTPool->GetOrCreateRT(InTargetSize, Format);
+		check(AllocatedRT);
 		AllocatedRT->ClearColor = ClearColor;
 		AllocatedRT->bAutoGenerateMips = bAutoGenerateMipMaps;
+		AllocatedRT->UpdateResource();
+
+		FTextureRenderTargetResource* RenderTargetResource = AllocatedRT->GameThread_GetRenderTargetResource();
+		ENQUEUE_RENDER_COMMAND(ClearRTCommand)(
+			[RenderTargetResource, ClearColor](FRHICommandList& RHICmdList)
+			{
+				FRHIRenderPassInfo RPInfo(RenderTargetResource->GetRenderTargetTexture(), ERenderTargetActions::DontLoad_Store);
+				TransitionRenderPassTargets(RHICmdList, RPInfo);
+				RHICmdList.BeginRenderPass(RPInfo, TEXT("ClearRT"));
+				DrawClearQuad(RHICmdList, ClearColor);
+				RHICmdList.EndRenderPass();
+			});
 
 		const ERHIFeatureLevel::Type FeatureLevel = GMaxRHIFeatureLevel;
 		UCanvas* RenderCanvas = RTPool->GetOrCreateCanvas();
 		FTextureBakerDrawTarget& DrawTarget = ActiveDrawTargets.Emplace(RenderCanvas, FTextureBakerDrawTarget(AllocatedRT, FeatureLevel));
+		DrawTarget.InitializeCanvasObject(RenderCanvas);
 		return RenderCanvas;
 	}
 	return nullptr;

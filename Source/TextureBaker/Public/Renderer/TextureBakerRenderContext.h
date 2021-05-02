@@ -42,6 +42,7 @@ public:
 	const TSet<FName>& GetOutputsToBake() const { return OutputsToRender; }
 	
 	/* ITextureBakerRTPool interface */
+	virtual UTexture2D* GetOrCreateDerivedArt(UTexture2D* Source, const FTextureBakerResourceRequirements& Options) override;
 	virtual UTextureRenderTarget2D* GetOrCreateRT(const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format) override;
 	virtual UCanvas* GetOrCreateCanvas() override;
 	virtual bool ReleaseObject(UObject* Object) override;
@@ -52,13 +53,14 @@ public:
 
 private:
 	
-	bool										bIsPreviewContext;
-	UTextureBakerScenario*						OwnedScenario;
-	TSharedRef<FTextureBakerRenderScope>		CurrentRenderScope;
-	FString										OutputDirectoryPath;
-	TMap<FName, FTextureBakerOutputWriteout>	OutputInfos;
-	TSet<FName>									OutputsToRender;
+	bool												bIsPreviewContext;
+	UTextureBakerScenario*								OwnedScenario;
+	TSharedRef<FTextureBakerRenderScope>				CurrentRenderScope;
+	FString												OutputDirectoryPath;
+	TMap<FName, FTextureBakerOutputWriteout>			OutputInfos;
+	TSet<FName>											OutputsToRender;
 
-	TArray<UTextureRenderTarget2D*>				RenderTargetPool;
-	TArray<UCanvas*>							CanvasPool;
+	TMultiMap<FTextureBakerDerivedArtKey, UTexture2D*>  DerivedArtPool;
+	TArray<UTextureRenderTarget2D*>						RenderTargetPool;
+	TArray<UCanvas*>									CanvasPool;
 };

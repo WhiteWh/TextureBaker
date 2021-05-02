@@ -3,46 +3,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/TextureDefines.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Renderer/TextureBakerRenderScope.h"
 #include "TextureBakerScenario.generated.h"
-
-
-USTRUCT(BlueprintType)
-struct TEXTUREBAKER_API FTextureBakerOutputInfo
-{
-	GENERATED_BODY()
-
-public:
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Image)
-	FIntPoint OutputDimensions;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Image)
-	bool PadToSquare;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Image)
-	FLinearColor DefaultColor;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Image)
-	TEnumAsByte<enum TextureMipGenSettings> MipGenSettings;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Format)
-	TEnumAsByte<enum ETextureSourceFormat> OutputImageFormat;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Format)
-	bool bUseSRGB;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Compression)
-	TEnumAsByte<enum TextureCompressionSettings> CompressionSettings;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Compression)
-	bool bCompressWithoutAlpha;
-
-	FString ToString() const;
-	ETextureRenderTargetFormat GetRenderTargetFormat() const;
-	bool IsValid() const;
-};
 
 DECLARE_DYNAMIC_DELEGATE_RetVal_ThreeParams(bool, FTextureBakerRenderDelegate, FTextureBakerOutputInfo, Info, bool, bIsPreviewRender, UCanvas*, Canvas);
 
@@ -91,6 +55,9 @@ class TEXTUREBAKER_API UTextureBakerScenario : public UObject
 	
 public:
 
+	/* Overrides */
+	virtual bool IsEditorOnly() const {	return true; }
+	
 	/* Events */
 
 	UFUNCTION(BlueprintNativeEvent, Category = Events)
@@ -113,7 +80,7 @@ protected:
 
 	// Fully stream texture in
 	UFUNCTION(BlueprintCallable, Category = "TextureBaker|Streaming")
-	UTexture2D* PrepareTexture(UTexture2D* SourceTexture, bool bForceSourceResolution, int32 MipBias, TEnumAsByte<TextureMipGenSettings> MipGenSettings);
+	UTexture2D* PrepareTexture(UTexture2D* SourceTexture, const FTextureBakerResourceRequirements& Options);
 
 	// Fully stream material in (SetForceMipLevelsToBeResident)
 	UFUNCTION(BlueprintCallable, Category = "TextureBaker|Streaming")

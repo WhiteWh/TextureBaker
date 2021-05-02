@@ -42,6 +42,7 @@ public class TextureBaker : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
+				"RenderCore",
 				"PropertyEditor",
 				"EditorStyle",
 				"ClassViewer",

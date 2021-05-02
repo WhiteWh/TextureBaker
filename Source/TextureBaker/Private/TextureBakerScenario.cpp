@@ -10,25 +10,6 @@ FIntPoint EvaluateRequestedSize(const FIntPoint& SourceSize, int32 MipBias)
 	return FIntPoint(SourceSize.X >> MipDowngrade, SourceSize.Y >> MipDowngrade);
 }
 
-FString FTextureBakerOutputInfo::ToString() const
-{
-	FString OutputFormatName = StaticEnum<ETextureSourceFormat>()->GetDisplayNameTextByValue(OutputImageFormat).ToString();
-	FString CompressionSettingsText = StaticEnum<TextureCompressionSettings>()->GetDisplayNameTextByValue(CompressionSettings).ToString();
-	const TCHAR* sRGBText = bUseSRGB ? TEXT(" (sRGB)") : TEXT("");
-	const TCHAR* noAlphaText = bCompressWithoutAlpha ? TEXT(" (w/o alpha)") : TEXT("");
-	return FString::Printf(TEXT("%dx%d %s%s %s%s"), OutputDimensions.X, OutputDimensions.Y, *OutputFormatName, sRGBText, *CompressionSettingsText, noAlphaText);
-}
-
-ETextureRenderTargetFormat FTextureBakerOutputInfo::GetRenderTargetFormat() const
-{
-	return FTextureBakerModule::SelectRenderTargetFormatForImageSourceFormat(OutputImageFormat, bUseSRGB);
-}
-
-bool FTextureBakerOutputInfo::IsValid() const
-{
-	return OutputDimensions.GetMin() > 0 && OutputDimensions.GetMax() <= 4096;
-}
-
 FName FTextureBakerOutputWriteout::GetOutputName() const
 {
 	return OutputName;
@@ -49,25 +30,21 @@ bool UTextureBakerScenario::RenderCommonTargets_Implementation(bool bIsPreviewRe
 	return true;
 }
 
-UTexture2D* UTextureBakerScenario::PrepareTexture(UTexture2D* SourceTexture, bool bForceSourceResolution, int32 MipBias, TEnumAsByte<TextureMipGenSettings> MipGenSettings)
+UTexture2D* UTextureBakerScenario::PrepareTexture(UTexture2D* SourceTexture, const FTextureBakerResourceRequirements& Options)
 {
+	UTexture2D* Result = nullptr;
 	if (CurrentRenderScope.IsValid() && SourceTexture)
 	{
 		FIntPoint ImportedSize = SourceTexture->GetImportedSize();
-		FIntPoint RequestedSize = EvaluateRequestedSize(ImportedSize, MipBias);
-		FIntPoint InGameSize = FIntPoint(SourceTexture->GetSizeX(), SourceTexture->GetSizeY());
-		bool      SourceTextureIsCompressed = !SourceTexture->CompressionNone;
-		if ((bForceSourceResolution ? RequestedSize != InGameSize : ((RequestedSize - InGameSize).GetMin() < 0)) || SourceTextureIsCompressed)
-		{
-			return CurrentRenderScope->CreateTemporaryTexture(SourceTexture, RequestedSize, MipGenSettings, TextureMipGenSettings::TMGS_NoMipmaps);
-		}
-		CurrentRenderScope->SetTextureMipsResident(SourceTexture, true);
+		FIntPoint CurrentSize = FIntPoint(SourceTexture->GetSizeX(), SourceTexture->GetSizeY());
+		Result = CurrentRenderScope->ConditionallyCreateDerivedArt(SourceTexture, Options);
+		CurrentRenderScope->SetTextureMipsResident(Result, true);
 	}
-	if (SourceTexture)
+	if (Result)
 	{
-		SourceTexture->WaitForStreaming();
+		Result->WaitForStreaming();
 	}
-	return SourceTexture;
+	return Result;
 }
 
 UMaterialInterface* UTextureBakerScenario::PrepareMaterial(UMaterialInterface* SourceMaterial)
@@ -122,7 +99,8 @@ UTexture2D* UTextureBakerScenario::DownsampleTexture(UTexture2D* SourceTexture, 
 	if (CurrentRenderScope.IsValid() && SourceTexture)
 	{
 		const FIntPoint TargetSize = EvaluateRequestedSize(SourceTexture->GetImportedSize(), MipIndex);
-		return MipIndex > 0 ? CurrentRenderScope->CreateTemporaryTexture(SourceTexture, TargetSize, MipGenSettings, TextureMipGenSettings::TMGS_NoMipmaps) : SourceTexture;
+		FTextureBakerOutputInfo DownsampledInfo(SourceTexture, TargetSize);
+		return MipIndex > 0 ? CurrentRenderScope->CreateTemporaryTexture(DownsampledInfo, ETextureSourceFormat::TSF_Invalid, nullptr) : SourceTexture;
 	}
 	return nullptr;
 }
