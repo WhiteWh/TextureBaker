@@ -163,6 +163,7 @@ UTexture2D* FTextureBakerRenderContext::GetOrCreateDerivedArt(UTexture2D* Source
 			OutTexture->AddressX = Source->AddressX;
 			OutTexture->AddressY = Source->AddressY;
 			OutTexture->bFlipGreenChannel = Source->bFlipGreenChannel;
+			OutTexture->SRGB = Source->SRGB;
 			OutTexture->MaxTextureSize = Options.bUseImportedResolution ? NewTextureSize.GetMax() : Source->MaxTextureSize;
 			OutTexture->Source.Init(SourceArt.GetSizeX(), SourceArt.GetSizeY(), 1, SourceArt.GetNumMips(), SourceArt.GetFormat(), Reference);
 			SourceArt.UnlockMip(0);

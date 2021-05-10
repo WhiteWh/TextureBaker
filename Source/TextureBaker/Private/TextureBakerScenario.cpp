@@ -15,6 +15,16 @@ FName FTextureBakerOutputWriteout::GetOutputName() const
 	return OutputName;
 }
 
+FTextureBakerSwapRT::FTextureBakerSwapRT()
+{
+
+}
+
+FTextureBakerSwapRT::FTextureBakerSwapRT(UTextureBakerScenario* Environment, const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor, int32 HistoryLength)
+{
+
+}
+
 bool UTextureBakerScenario::InitialSettingsIsValid_Implementation() const
 {
 	return true;
@@ -79,19 +89,19 @@ UMaterialInstanceDynamic* UTextureBakerScenario::PrepareDynamicMaterialInstance(
 	return nullptr;
 }
 
-UCanvas* UTextureBakerScenario::CreateTemporaryDrawRT(const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor, bool bAutoGenerateMipMaps)
+UCanvas* UTextureBakerScenario::CreateTemporaryDrawRT(const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor)
 {
-	return CurrentRenderScope.IsValid() ? CurrentRenderScope->CreateTemporaryDrawRT(InTargetSize, Format, ClearColor, bAutoGenerateMipMaps) : nullptr;
+	return CurrentRenderScope.IsValid() ? CurrentRenderScope->CreateTemporaryDrawRT(InTargetSize, Format, ClearColor, false) : nullptr;
 }
 
-FTextureBakerSwapRT UTextureBakerScenario::CreateTemporarySwapRT(int32 HistoryLength, const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor, bool bAutoGenerateMipMaps)
+FTextureBakerSwapRT UTextureBakerScenario::CreateTemporarySwapRT(int32 HistoryLength, const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor)
 {
-	return FTextureBakerSwapRT();
+	return FTextureBakerSwapRT(this, InTargetSize, Format, ClearColor, HistoryLength);
 }
 
-UTexture2D* UTextureBakerScenario::ResolveTemporaryDrawRT(UCanvas* DrawTarget)
+UTexture2D* UTextureBakerScenario::ResolveTemporaryDrawRT(UCanvas* DrawTarget, TextureMipGenSettings MipGenSettings, ETBImageNormalization Normalization)
 {
-	return (DrawTarget && CurrentRenderScope.IsValid()) ? CurrentRenderScope->ResolveTemporaryDrawRT(DrawTarget) : nullptr;
+	return (DrawTarget && CurrentRenderScope.IsValid()) ? CurrentRenderScope->ResolveTemporaryDrawRT(DrawTarget, MipGenSettings, Normalization) : nullptr;
 }
 
 UTexture2D* UTextureBakerScenario::DownsampleTexture(UTexture2D* SourceTexture, int32 MipIndex, TEnumAsByte<TextureMipGenSettings> MipGenSettings)
@@ -126,7 +136,7 @@ TSharedPtr<FTextureBakerRenderScope> UTextureBakerScenario::LeaveRenderScope()
 	return CurrentRenderScope;
 }
 
-UCanvas* UTextureBakerOutputBlueprintLibrary::DrawToSwapRT(FTextureBakerSwapRT& Target, TArray<UTexture2D*>& History, FIntPoint& ScreenSize)
+UCanvas* UTextureBakerOutputBlueprintLibrary::DrawToSwapRT(FTextureBakerSwapRT& Target, TArray<UTexture*>& History, FIntPoint& ScreenSize)
 {
 	return nullptr;
 }

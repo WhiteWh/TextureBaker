@@ -168,7 +168,7 @@ void FTextureBakerModule::SaveBakedTextureResult(const FTextureBakerRenderResult
 			Texture->MipGenSettings = Result.GetInfo().MipGenSettings;
 			Texture->CompressionNoAlpha = Result.GetInfo().bCompressWithoutAlpha;
 			Texture->PaddingColor = Result.GetInfo().DefaultColor.ToFColor(Result.GetInfo().bUseSRGB);
-			WriteTexture2DSourceArt(Texture, Result.GetInfo().OutputImageFormat, RenderTarget, 0);
+			WriteTexture2DSourceArt(Texture, Result.GetInfo().OutputImageFormat, RenderTarget, Result.GetInfo().Normalization);
 
 			Texture->MarkPackageDirty();
 
@@ -181,7 +181,7 @@ void FTextureBakerModule::SaveBakedTextureResult(const FTextureBakerRenderResult
 	}
 }
 
-void FTextureBakerModule::WriteTexture2DSourceArt(UTexture2D* InTexture2D, ETextureSourceFormat InTextureFormat, UTextureRenderTarget2D* SourceRT, uint32 Flags)
+void FTextureBakerModule::WriteTexture2DSourceArt(UTexture2D* InTexture2D, ETextureSourceFormat InTextureFormat, UTextureRenderTarget2D* SourceRT, ETBImageNormalization DataRange)
 {
 	if (InTexture2D && InTextureFormat == ETextureSourceFormat::TSF_Invalid)
 	{
@@ -193,7 +193,7 @@ void FTextureBakerModule::WriteTexture2DSourceArt(UTexture2D* InTexture2D, EText
 	{
 		FIntPoint Size(SourceRT->SizeX, SourceRT->SizeY);
 		FTextureRenderTargetResource* RenderTargetResource = SourceRT->GameThread_GetRenderTargetResource();
-		TSharedPtr<FTextureBakerSurfaceReadback> ReadbackHandler = GetReadbackHandler(SourceRT->GetFormat(), SourceRT->IsSRGB());
+		TSharedPtr<FTextureBakerSurfaceReadback> ReadbackHandler = GetReadbackHandler(InTextureFormat, SourceRT->IsSRGB(), DataRange);
 
 		const uint64 ImagePixelBytes = FTextureSource::GetBytesPerPixel(InTextureFormat);
 		const uint64 ImagePixelsTotal = Size.X * Size.Y;
@@ -408,14 +408,16 @@ class FTextureBakerLinearReadback : public FTextureBakerNativeMappedReadback<FLi
 {
 public:
 	
-	FTextureBakerLinearReadback() : FTextureBakerNativeMappedReadback<FLinearColor>(ERangeCompressionMode::RCM_UNorm) {}
-	FTextureBakerLinearReadback(ERangeCompressionMode RangeMapping) : FTextureBakerNativeMappedReadback<FLinearColor>(RangeMapping) {}
+	FTextureBakerLinearReadback() : FTextureBakerNativeMappedReadback<FLinearColor>(ERangeCompressionMode::RCM_UNorm), bInputInSRGB(true) {}
+	FTextureBakerLinearReadback(ERangeCompressionMode RangeMapping, bool bSRGBInput) : FTextureBakerNativeMappedReadback<FLinearColor>(RangeMapping), bInputInSRGB(bSRGBInput) {}
 
 	virtual void ReadbackBuffer(FTextureRenderTargetResource* SourceRT, void* DestBuffer) const override
 	{
 		check(SourceRT);
 		check(DestBuffer);
-		SourceRT->ReadLinearColorPixelsPtr((FLinearColor*)DestBuffer, FReadSurfaceDataFlags(RangeMappingMode));
+		FReadSurfaceDataFlags Options(RangeMappingMode);
+		Options.SetLinearToGamma(!bInputInSRGB);
+		SourceRT->ReadLinearColorPixelsPtr((FLinearColor*)DestBuffer, Options);
 	}
 
 	virtual void TranscodePixels(ETextureSourceFormat ImageFormat, void* DestPixels, const void* SrcPixels, int64 DestStep, int64 SrcStep, uint64 PixelNum) const override
@@ -426,7 +428,7 @@ public:
 			{
 			case ETextureSourceFormat::TSF_BGRA8:
 			{
-				*reinterpret_cast<uint32*>(DestPixels) = reinterpret_cast<const FLinearColor*>(SrcPixels)->ToFColor(false)._ToPackedBGRA();
+				*reinterpret_cast<uint32*>(DestPixels) = reinterpret_cast<const FLinearColor*>(SrcPixels)->ToFColor(bInputInSRGB)._ToPackedBGRA();
 				break;
 			}
 			case ETextureSourceFormat::TSF_BGRE8:
@@ -473,20 +475,24 @@ public:
 			SrcPixels = FTextureBakerMath::OffsetPointer(SrcPixels, SrcStep);
 		}
 	}
+protected:
+	bool bInputInSRGB;
 };
 
 class FTextureBakerColorReadback : public FTextureBakerNativeMappedReadback<FColor>
 {
 public:
-	FTextureBakerColorReadback() : FTextureBakerNativeMappedReadback<FColor>(ERangeCompressionMode::RCM_UNorm) {}
-	FTextureBakerColorReadback(ERangeCompressionMode RangeMapping) : FTextureBakerNativeMappedReadback<FColor>(RangeMapping) {}
+	FTextureBakerColorReadback() : FTextureBakerNativeMappedReadback<FColor>(ERangeCompressionMode::RCM_UNorm), bInputInSRGB(true) {}
+	FTextureBakerColorReadback(ERangeCompressionMode RangeMapping, bool bSRGBInput) : FTextureBakerNativeMappedReadback<FColor>(RangeMapping), bInputInSRGB(bSRGBInput) {}
 	virtual bool DirectlyCompatibleWithImage(ETextureSourceFormat ImageFormat) const override { return ImageFormat == ETextureSourceFormat::TSF_BGRA8; }
 
 	virtual void ReadbackBuffer(FTextureRenderTargetResource* SourceRT, void* DestBuffer) const override
 	{
 		check(SourceRT);
 		check(DestBuffer);
-		SourceRT->ReadPixelsPtr((FColor*)DestBuffer, FReadSurfaceDataFlags(RangeMappingMode));
+		FReadSurfaceDataFlags Options(RangeMappingMode);
+		Options.SetLinearToGamma(!bInputInSRGB);
+		SourceRT->ReadPixelsPtr((FColor*)DestBuffer, Options);
 	}
 
 	virtual void TranscodePixels(ETextureSourceFormat ImageFormat, void* DestPixels, const void* SrcPixels, int64 DestStep, int64 SrcStep, uint64 PixelNum) const override
@@ -544,105 +550,37 @@ public:
 			SrcPixels = FTextureBakerMath::OffsetPointer(SrcPixels, SrcStep);
 		}
 	}
+protected:
+	bool bInputInSRGB;
 };
 
-class FTextureBakerColor16Readback : public FTextureBakerNativeReadback<FFloat16Color>
+ERangeCompressionMode ReadbackNormalizationMode(ETBImageNormalization DataRange)
 {
-public:
-	FTextureBakerColor16Readback() {}
-	virtual bool DirectlyCompatibleWithImage(ETextureSourceFormat ImageFormat) const override { return ImageFormat == ETextureSourceFormat::TSF_RGBA16F; }
-
-	virtual void ReadbackBuffer(FTextureRenderTargetResource* SourceRT, void* DestBuffer) const override
+	switch (DataRange)
 	{
-		check(SourceRT);
-		check(DestBuffer);
-		TArray<FFloat16Color> SurfaceData;
-		SourceRT->ReadFloat16Pixels(SurfaceData, ECubeFace::CubeFace_MAX);
-		FMemory::Memcpy(DestBuffer, SurfaceData.GetData(), SurfaceData.Num() * sizeof(FFloat16Color));
-	}
+	case ETBImageNormalization::Saturate:
+		return ERangeCompressionMode::RCM_UNorm;
+	case ETBImageNormalization::Normalize:
+		return ERangeCompressionMode::RCM_MinMax;
+	case ETBImageNormalization::Auto:
+		return ERangeCompressionMode::RCM_MinMaxNorm;
+	};
 
-	virtual void TranscodePixels(ETextureSourceFormat ImageFormat, void* DestPixels, const void* SrcPixels, int64 DestStep, int64 SrcStep, uint64 PixelNum) const override
-	{
-		for (uint64 PixelIndex = 0; PixelIndex < PixelNum; PixelIndex++)
-		{
-			switch (ImageFormat)
-			{
-			case ETextureSourceFormat::TSF_BGRA8:
-			{
-				*reinterpret_cast<uint32*>(DestPixels) = FLinearColor(*reinterpret_cast<const FFloat16Color*>(SrcPixels)).ToFColor(false)._ToPackedBGRA();
-				break;
-			}
-			case ETextureSourceFormat::TSF_BGRE8:
-			{
-				*reinterpret_cast<uint32*>(DestPixels) = FLinearColor(*reinterpret_cast<const FFloat16Color*>(SrcPixels)).ToRGBE()._ToPackedBGRA();
-				break;
-			}
-			case ETextureSourceFormat::TSF_G16:
-			{
-				*reinterpret_cast<uint16*>(DestPixels) = FLinearColor(*reinterpret_cast<const FFloat16Color*>(SrcPixels)).GetLuminance() * 65535;
-				break;
-			}
-			case ETextureSourceFormat::TSF_G8:
-			{
-				*reinterpret_cast<uint8*>(DestPixels) = FLinearColor(*reinterpret_cast<const FFloat16Color*>(SrcPixels)).GetLuminance() * 255;
-				break;
-			}
-			case ETextureSourceFormat::TSF_RGBA16:
-			{
-				const FLinearColor SourceColor(*reinterpret_cast<const FFloat16Color*>(SrcPixels));
-				reinterpret_cast<uint16*>(DestPixels)[0] = FMath::Clamp(SourceColor.R, 0.0f, 1.0f) * 65535;
-				reinterpret_cast<uint16*>(DestPixels)[1] = FMath::Clamp(SourceColor.G, 0.0f, 1.0f) * 65535;
-				reinterpret_cast<uint16*>(DestPixels)[2] = FMath::Clamp(SourceColor.B, 0.0f, 1.0f) * 65535;
-				reinterpret_cast<uint16*>(DestPixels)[3] = FMath::Clamp(SourceColor.A, 0.0f, 1.0f) * 65535;
-				break;
-			}
-			case ETextureSourceFormat::TSF_RGBA16F:
-			{
-				*reinterpret_cast<FFloat16Color*>(DestPixels) = *reinterpret_cast<const FFloat16Color*>(SrcPixels);
-				break;
-			}
-			case ETextureSourceFormat::TSF_RGBA8:
-			{
-				*reinterpret_cast<uint32*>(DestPixels) = FLinearColor(*reinterpret_cast<const FFloat16Color*>(SrcPixels)).ToFColor(false)._ToPackedRGBA();
-				break;
-			}
-			case ETextureSourceFormat::TSF_RGBE8:
-			{
-				*reinterpret_cast<uint32*>(DestPixels) = FLinearColor(*reinterpret_cast<const FFloat16Color*>(SrcPixels)).ToRGBE()._ToPackedRGBA();
-				break;
-			}
-			}
-			DestPixels = FTextureBakerMath::OffsetPointer(DestPixels, DestStep);
-			SrcPixels = FTextureBakerMath::OffsetPointer(SrcPixels, SrcStep);
-		}
-	}
-};
+	return ERangeCompressionMode::RCM_UNorm;
+}
 
-TSharedPtr<FTextureBakerSurfaceReadback> FTextureBakerModule::GetReadbackHandler(EPixelFormat PixelFormat, bool sRGB)
+TSharedPtr<FTextureBakerSurfaceReadback> FTextureBakerModule::GetReadbackHandler(ETextureSourceFormat OutputFormat, bool sRGB, ETBImageNormalization DataRange)
 {
-	ETextureRenderTargetFormat RTSurfaceFormat = SelectRenderTargetFormatForPixelFormat(PixelFormat, sRGB);
-	switch (PixelFormat)
+	ERangeCompressionMode CompressionMode = ReadbackNormalizationMode(DataRange);
+	switch (OutputFormat)
 	{
-	case ETextureRenderTargetFormat::RTF_R8:
-	case ETextureRenderTargetFormat::RTF_RG8:
-	case ETextureRenderTargetFormat::RTF_RGB10A2:
-	case ETextureRenderTargetFormat::RTF_RGBA8:
-		return MakeShared<FTextureBakerLinearReadback>(ERangeCompressionMode::RCM_UNorm);
+	case ETextureSourceFormat::TSF_BGRA8:
+	case ETextureSourceFormat::TSF_G8:
+		return MakeShared<FTextureBakerColorReadback>(CompressionMode, sRGB);
 
-	case ETextureRenderTargetFormat::RTF_R32f:
-	case ETextureRenderTargetFormat::RTF_RG32f:
-	case ETextureRenderTargetFormat::RTF_RGBA32f:
-		return MakeShared<FTextureBakerLinearReadback>(ERangeCompressionMode::RCM_MinMax);
-
-	case ETextureRenderTargetFormat::RTF_R16f:
-	case ETextureRenderTargetFormat::RTF_RG16f:
-	case ETextureRenderTargetFormat::RTF_RGBA16f:
-		return MakeShared<FTextureBakerColor16Readback>();
-	
-	case ETextureRenderTargetFormat::RTF_RGBA8_SRGB:
-		return MakeShared<FTextureBakerColorReadback>(ERangeCompressionMode::RCM_UNorm);
+	default:
+		return MakeShared<FTextureBakerLinearReadback>(CompressionMode, sRGB);
 	}
-
 	return nullptr;
 }
 

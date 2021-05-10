@@ -4,6 +4,14 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "TextureBakerRenderTypes.generated.h"
 
+UENUM(BlueprintType)
+enum class ETBImageNormalization : uint8
+{
+	Saturate,	// ERangeCompressionMode::UNorm
+	Normalize,  // ERangeCompressionMode::MinMax
+	Auto		// ERangeCompressionMode::MinMaxNorm
+};
+
 USTRUCT(BlueprintType)
 struct TEXTUREBAKER_API FTextureBakerOutputInfo
 {
@@ -39,6 +47,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Format)
 	TEnumAsByte<enum ETextureSourceFormat> OutputImageFormat;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Format)
+	ETBImageNormalization Normalization;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Format)
 	bool bUseSRGB;

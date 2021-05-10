@@ -61,11 +61,11 @@ void FTextureBakerDrawTarget::WaitDrawCompletion()
 	}
 }
 
-UTexture2D* FTextureBakerDrawTarget::Resolve(FTextureBakerRenderScope* InRenderScope)
+UTexture2D* FTextureBakerDrawTarget::Resolve(FTextureBakerRenderScope* InRenderScope, TextureMipGenSettings MipGenSettings, ETBImageNormalization Normalization)
 {
 	if (UTextureRenderTarget2D* ReleasedRT = ReleaseRT())
 	{
-		UTexture2D* OutTexture = InRenderScope->CreateTemporaryTexture(ReleasedRT, TextureMipGenSettings::TMGS_NoMipmaps);
+		UTexture2D* OutTexture = InRenderScope->CreateTemporaryTexture(ReleasedRT, MipGenSettings, Normalization);
 		InRenderScope->ReleaseTemporaryResource(ReleasedRT);
 		return OutTexture;
 	}
@@ -178,7 +178,7 @@ UTexture2D* FTextureBakerRenderScope::CreateTemporaryTexture(const FTextureBaker
 	return nullptr;
 }
 
-UTexture2D* FTextureBakerRenderScope::CreateTemporaryTexture(UTextureRenderTarget2D* SourceRT, TextureMipGenSettings MipFilter)
+UTexture2D* FTextureBakerRenderScope::CreateTemporaryTexture(UTextureRenderTarget2D* SourceRT, TextureMipGenSettings MipFilter, ETBImageNormalization Normalization)
 {
 	if (SourceRT)
 	{
@@ -191,7 +191,7 @@ UTexture2D* FTextureBakerRenderScope::CreateTemporaryTexture(UTextureRenderTarge
 			if (UTexture2D* OutTexture = UTexture2D::CreateTransient(InTargetSize.X, InTargetSize.Y, PixelFormat))
 			{
 				OutTexture->MipGenSettings = MipFilter;
-				FTextureBakerModule::GetChecked().WriteTexture2DSourceArt(OutTexture, ImageFormat, SourceRT, 0);
+				FTextureBakerModule::GetChecked().WriteTexture2DSourceArt(OutTexture, ImageFormat, SourceRT, Normalization);
 				TemporaryTextures.Add(OutTexture);
 				return OutTexture;
 			}
@@ -263,13 +263,13 @@ UCanvas* FTextureBakerRenderScope::CreateTemporaryDrawRT(const FIntPoint& InTarg
 	return nullptr;
 }
 
-UTexture2D* FTextureBakerRenderScope::ResolveTemporaryDrawRT(UCanvas* DrawTarget)
+UTexture2D* FTextureBakerRenderScope::ResolveTemporaryDrawRT(UCanvas* DrawTarget, TextureMipGenSettings MipGenSettings, ETBImageNormalization Normalization)
 {
 	if (FTextureBakerDrawTarget* DrawContext = ActiveDrawTargets.Find(DrawTarget))
 	{
 		if (ITextureBakerRTPool* RTPool = GetRenderTargetPool())
 		{
-			if (UTexture2D* Texture = DrawContext->Resolve(this))
+			if (UTexture2D* Texture = DrawContext->Resolve(this, MipGenSettings, Normalization))
 			{
 				ActiveDrawTargets.Remove(DrawTarget);
 				RTPool->ReleaseObject(DrawTarget);

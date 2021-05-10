@@ -13,7 +13,7 @@ public:
 	FTextureBakerDrawTarget(UTextureRenderTarget2D* RenderTarget, ERHIFeatureLevel::Type FeatureLevel);
 	void AddReferencedObjects(FReferenceCollector& Collector);
 	void InitializeCanvasObject(UCanvas* Canvas);
-	UTexture2D* Resolve(FTextureBakerRenderScope* InRenderScope);
+	UTexture2D* Resolve(FTextureBakerRenderScope* InRenderScope, TextureMipGenSettings MipGenSettings, ETBImageNormalization Normalization);
 	void Discard(FTextureBakerRenderScope* InRenderScope);
 	void WaitDrawCompletion();
 
@@ -52,10 +52,10 @@ public:
 	ITextureBakerRTPool* GetRenderTargetPool() const;
 	UTextureRenderTarget2D* CreateTemporaryRT(const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor, bool bAutoGenerateMipMaps);
 	UTexture2D* ConditionallyCreateDerivedArt(UTexture2D* SourceTexture, const FTextureBakerResourceRequirements& Options, ETBDerivedArtMode Mode = ETBDerivedArtMode::None);
-	UTexture2D* CreateTemporaryTexture(UTextureRenderTarget2D* SourceRT, TextureMipGenSettings MipFilter);
+	UTexture2D* CreateTemporaryTexture(UTextureRenderTarget2D* SourceRT, TextureMipGenSettings MipFilter, ETBImageNormalization Normalization);
 	UTexture2D* CreateTemporaryTexture(const FTextureBakerOutputInfo& TextureInfo, ETextureSourceFormat InDataFormat, const void* Data);
 	UCanvas* CreateTemporaryDrawRT(const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor, bool bAutoGenerateMipMaps);
-	UTexture2D* ResolveTemporaryDrawRT(UCanvas* DrawTarget);
+	UTexture2D* ResolveTemporaryDrawRT(UCanvas* DrawTarget, TextureMipGenSettings MipGenSettings, ETBImageNormalization Normalization);
 	UTextureRenderTarget2D* ResolveTemporaryDrawRT_AsRenderTarget(UCanvas* DrawTarget);
 	bool ReleaseTemporaryResource(UObject* ResourceObject);
 	bool SetTextureMipsResident(UTexture2D* SourceTexture, bool Value);

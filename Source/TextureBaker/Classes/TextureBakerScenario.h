@@ -43,6 +43,10 @@ USTRUCT(BlueprintType)
 struct TEXTUREBAKER_API FTextureBakerSwapRT
 {
 	GENERATED_BODY()
+
+public:
+	FTextureBakerSwapRT();
+	FTextureBakerSwapRT(UTextureBakerScenario* Environment, const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor, int32 HistoryLength);
 };
 
 /**
@@ -92,15 +96,15 @@ protected:
 
 	// Create regular draw target
 	UFUNCTION(BlueprintCallable, Category = "TextureBaker|Render")
-	UCanvas* CreateTemporaryDrawRT(const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor, bool bAutoGenerateMipMaps);
+	UCanvas* CreateTemporaryDrawRT(const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor);
 
 	// Create swappable draw target
 	UFUNCTION(BlueprintCallable, Category = "TextureBaker|Render")
-	FTextureBakerSwapRT CreateTemporarySwapRT(int32 HistoryLength, const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor, bool bAutoGenerateMipMaps);
+	FTextureBakerSwapRT CreateTemporarySwapRT(int32 HistoryLength, const FIntPoint& InTargetSize, ETextureRenderTargetFormat Format, FLinearColor ClearColor);
 
 	// Create regular draw target
 	UFUNCTION(BlueprintCallable, Category = "TextureBaker|Render")
-	UTexture2D* ResolveTemporaryDrawRT(UCanvas* DrawTarget);
+	UTexture2D* ResolveTemporaryDrawRT(UCanvas* DrawTarget, TextureMipGenSettings MipGenSettings, ETBImageNormalization Normalization);
 
 	// Create downsampled texture
 	UFUNCTION(BlueprintCallable, Category = "TextureBaker|Render")
@@ -132,7 +136,7 @@ public:
 
 	// Draw to swappable RT
 	UFUNCTION(BlueprintCallable, Category = "TextureBaker|Render")
-	static UCanvas* DrawToSwapRT(UPARAM(ref) FTextureBakerSwapRT& Target, TArray<UTexture2D*>& History, FIntPoint& ScreenSize);
+	static UCanvas* DrawToSwapRT(UPARAM(ref) FTextureBakerSwapRT& Target, TArray<UTexture*>& History, FIntPoint& ScreenSize);
 
 	// Resolve swap RT context
 	UFUNCTION(BlueprintCallable, Category = "TextureBaker|Render")
