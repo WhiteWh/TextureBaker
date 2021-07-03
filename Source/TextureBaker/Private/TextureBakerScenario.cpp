@@ -25,12 +25,32 @@ FTextureBakerSwapRT::FTextureBakerSwapRT(UTextureBakerScenario* Environment, con
 
 }
 
+FTextureBakerOutputList::FTextureBakerOutputList()
+{
+}
+
+bool FTextureBakerOutputList::AddTexture2DOutput(const FTextureBakerOutputInfo& Options, const FString& InOutputAssetPath, FTextureBakerRenderDelegate InRenderOutputTarget)
+{
+	if (Options.IsValid() && FPaths::ValidatePath(InOutputAssetPath) && InRenderOutputTarget.IsBound())
+	{
+		TextureOutputs.Emplace(Options, InOutputAssetPath, InRenderOutputTarget);
+		return true;
+	}
+	return false;
+}
+
+bool FTextureBakerOutputList::AddDataOutput(UClass* AssetClass, const FString& InOutputAssetPath, FTextureBakerWriteDataDelegate InGenerateOutputTarget)
+{
+	return false;
+}
+
+
 bool UTextureBakerScenario::InitialSettingsIsValid_Implementation() const
 {
 	return true;
 }
 
-void UTextureBakerScenario::RegisterOutputTarget_Implementation(const FString& DirectoryPath, TArray<FTextureBakerOutputWriteout>& OutputTargets) const
+void UTextureBakerScenario::RegisterOutputTarget_Implementation(const FString& DirectoryPath, FTextureBakerOutputList& OutputTargets) const
 {
 	
 }
@@ -155,4 +175,14 @@ void UTextureBakerOutputBlueprintLibrary::BreakOutputWriteout(FTextureBakerOutpu
 FTextureBakerOutputWriteout UTextureBakerOutputBlueprintLibrary::MakeOutputWriteout(const FString& OutputAssetPath, const FTextureBakerOutputInfo& OutputInfo, FTextureBakerRenderDelegate OnRenderOutputTarget)
 {
 	return FTextureBakerOutputWriteout(OutputInfo, OutputAssetPath, OnRenderOutputTarget);
+}
+
+bool UTextureBakerOutputBlueprintLibrary::AddTexture2DOutput(FTextureBakerOutputList& Target, const FTextureBakerOutputInfo& Options, const FString& InOutputAssetPath, FTextureBakerRenderDelegate InRenderOutputTarget)
+{
+	return Target.AddTexture2DOutput(Options, InOutputAssetPath, InRenderOutputTarget);
+}
+
+bool UTextureBakerOutputBlueprintLibrary::AddDataOutput(FTextureBakerOutputList& Target, UClass* AssetClass, const FString& InOutputAssetPath, FTextureBakerWriteDataDelegate InGenerateOutputTarget)
+{
+	return Target.AddDataOutput(AssetClass, InOutputAssetPath, InGenerateOutputTarget);
 }

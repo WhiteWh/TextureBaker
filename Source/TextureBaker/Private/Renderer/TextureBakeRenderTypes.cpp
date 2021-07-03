@@ -28,12 +28,18 @@ void FTextureBakerOutputInfo::SetTextureAttributes(UTexture2D* Texture) const
 {
 	if (Texture)
 	{
-		Texture->SRGB = bUseSRGB;
-		Texture->CompressionNoAlpha = bCompressWithoutAlpha;
 		Texture->PowerOfTwoMode = Padding;
-		Texture->PaddingColor = DefaultColor.ToFColor(bUseSRGB);
-		Texture->MipGenSettings = MipGenSettings;
 		Texture->CompressionSettings = CompressionSettings;
+		Texture->MipGenSettings = MipGenSettings;
+		Texture->CompressionNoAlpha = bCompressWithoutAlpha;
+		Texture->PaddingColor = DefaultColor.ToFColor(bUseSRGB);
+		Texture->Filter = Filter;
+		Texture->LossyCompressionAmount = LossyCompressionAmount;
+		Texture->MaxTextureSize = MaxTextureSize;
+		Texture->CompressionQuality = CompressionQuality;
+		Texture->LODBias = LODBias;
+		Texture->AddressX = AddressX;
+		Texture->AddressY = AddressY;
 	}
 }
 

@@ -21,6 +21,7 @@ public:
 	FName GetOutputFName() const { return OutputName; }
 
 	bool IsOutputEnabled() const { return bOutputEnabled; }
+	void SetOutputEnabled(bool bValue) { bOutputEnabled = bValue; }
 	FText GetOutputName() const { return FText::FromName(OutputName); }
 	FText GetOutputPath() const { return FText::FromString(OutputPath); }
 	FText GetOutputInfo() const { return FText::FromString(DetailedInfo.ToString()); }
@@ -57,6 +58,11 @@ public:
 
 	// SMultiColumnTableRow overrides
 	virtual TSharedRef<SWidget> GenerateWidgetForColumn(const FName& ColumnName) override;
+
+	bool CanBeModified() const;
+	ECheckBoxState GetCheckedState() const;
+	void CycleCheckedState(ECheckBoxState InCheckboxState);
+	const FSlateBrush* GetCurrentOutputIcon() const;
 
 private:
 	TSharedPtr<FTextureRepackOutputDecl> OutputDecl;

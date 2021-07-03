@@ -22,15 +22,21 @@ public:
 	FTextureBakerOutputInfo() : 
 		OutputDimensions(1, 1), Padding(ETexturePowerOfTwoSetting::None), 
 		DefaultColor(FColor::Black), MipGenSettings(TextureMipGenSettings::TMGS_FromTextureGroup),
-		OutputImageFormat(ETextureSourceFormat::TSF_BGRA8),	bUseSRGB(true),
-		CompressionSettings(TextureCompressionSettings::TC_Default), bCompressWithoutAlpha(false)
+		OutputImageFormat(ETextureSourceFormat::TSF_BGRA8), Normalization(ETBImageNormalization::Saturate),
+		Filter(TextureFilter::TF_Default), AddressX(TextureAddress::TA_Wrap), AddressY(TextureAddress::TA_Wrap), bUseSRGB(true),
+		CompressionSettings(TextureCompressionSettings::TC_Default), bCompressWithoutAlpha(false),
+		LossyCompressionAmount(ETextureLossyCompressionAmount::TLCA_Default), MaxTextureSize(0),
+		CompressionQuality(ETextureCompressionQuality::TCQ_Default), LODBias(0)
 	{}
 
-	FTextureBakerOutputInfo(UTexture2D* CompatibleTexture, const FIntPoint& Size) :
+	FTextureBakerOutputInfo(UTexture2D* CompatibleTexture, const FIntPoint& Size, ETBImageNormalization UsedNormalization = ETBImageNormalization::Saturate) :
 		OutputDimensions(Size), Padding(CompatibleTexture->PowerOfTwoMode),
 		DefaultColor(CompatibleTexture->PaddingColor), MipGenSettings(CompatibleTexture->MipGenSettings),
-		OutputImageFormat(CompatibleTexture->Source.GetFormat()), bUseSRGB(CompatibleTexture->SRGB),
-		CompressionSettings(CompatibleTexture->CompressionSettings), bCompressWithoutAlpha(CompatibleTexture->CompressionNoAlpha)
+		OutputImageFormat(CompatibleTexture->Source.GetFormat()), Normalization(UsedNormalization), 
+		Filter(CompatibleTexture->Filter), AddressX(CompatibleTexture->AddressX), AddressY(CompatibleTexture->AddressY), bUseSRGB(CompatibleTexture->SRGB),
+		CompressionSettings(CompatibleTexture->CompressionSettings), bCompressWithoutAlpha(CompatibleTexture->CompressionNoAlpha),
+		LossyCompressionAmount(CompatibleTexture->LossyCompressionAmount), MaxTextureSize(CompatibleTexture->MaxTextureSize),
+		CompressionQuality(CompatibleTexture->CompressionQuality), LODBias(CompatibleTexture->LODBias)
 	{}
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Image)
@@ -51,6 +57,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Format)
 	ETBImageNormalization Normalization;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Texture)
+	TEnumAsByte<enum TextureFilter> Filter;
+
+	/** The addressing mode to use for the X axis.								*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Texture, meta = (DisplayName = "X-axis Tiling Method"))
+	TEnumAsByte<enum TextureAddress> AddressX;
+
+	/** The addressing mode to use for the Y axis.								*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Texture, meta = (DisplayName = "Y-axis Tiling Method"))
+	TEnumAsByte<enum TextureAddress> AddressY;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Format)
 	bool bUseSRGB;
 
@@ -59,6 +76,23 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Compression)
 	bool bCompressWithoutAlpha;
+
+	/** How aggressively should any relevant lossy compression be applied. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Compression)
+	TEnumAsByte<ETextureLossyCompressionAmount> LossyCompressionAmount;
+
+	/** The maximum resolution for generated textures. A value of 0 means the maximum size for the format on each platform, except HDR long/lat cubemaps, which default to a resolution of 512. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Compression, meta = (DisplayName = "Maximum Texture Size", ClampMin = "0.0"))
+	int32 MaxTextureSize;
+
+	/** The compression quality for generated textures. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Compression, meta = (DisplayName = "Compression Quality"))
+	TEnumAsByte<enum ETextureCompressionQuality> CompressionQuality;
+
+	/** A bias to the index of the top mip level to use. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=LevelOfDetail, meta=(DisplayName="LOD Bias"), AssetRegistrySearchable)
+	int32 LODBias;
+
 
 	FString ToString() const;
 	ETextureRenderTargetFormat GetRenderTargetFormat() const;

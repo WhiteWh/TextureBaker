@@ -7,9 +7,9 @@ FTextureBakerRenderContext::FTextureBakerRenderContext(UTextureBakerScenario* In
 {
 	OwnedScenario = DuplicateObject<UTextureBakerScenario>(InitializedTemplate, GetTransientPackage(), NAME_None);
 
-	TArray<FTextureBakerOutputWriteout>  UnorderedOutputs;
+	FTextureBakerOutputList UnorderedOutputs;
 	OwnedScenario->RegisterOutputTarget(OutputDirectoryPath, UnorderedOutputs);
-	for (const FTextureBakerOutputWriteout& Output : UnorderedOutputs)
+	for (const FTextureBakerOutputWriteout& Output : UnorderedOutputs.GetTextureOutputs())
 	{
 		if (Output.OnRenderOutputTarget.IsBound())
 		{

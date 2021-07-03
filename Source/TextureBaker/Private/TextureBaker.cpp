@@ -162,14 +162,8 @@ void FTextureBakerModule::SaveBakedTextureResult(const FTextureBakerRenderResult
 			}
 
 			check(Texture);
-
-			Texture->PowerOfTwoMode = Result.GetInfo().Padding;
-			Texture->CompressionSettings = Result.GetInfo().CompressionSettings;
-			Texture->MipGenSettings = Result.GetInfo().MipGenSettings;
-			Texture->CompressionNoAlpha = Result.GetInfo().bCompressWithoutAlpha;
-			Texture->PaddingColor = Result.GetInfo().DefaultColor.ToFColor(Result.GetInfo().bUseSRGB);
+			Result.GetInfo().SetTextureAttributes(Texture);
 			WriteTexture2DSourceArt(Texture, Result.GetInfo().OutputImageFormat, RenderTarget, Result.GetInfo().Normalization);
-
 			Texture->MarkPackageDirty();
 
 			// Notify the asset registry

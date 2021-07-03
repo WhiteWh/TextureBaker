@@ -220,22 +220,22 @@ void STextureBakerScenarioWidget::Construct(const FArguments& InArgs)
 							SAssignNew(OutputDeclList, SListView<FTextureRepackOutputDeclPtr>)
 							.ListItemsSource(&RegisteredOutputDecls)
 							.OnGenerateRow(this, &STextureBakerScenarioWidget::GenerateOutputDeclRow)
-							.SelectionMode(ESelectionMode::None)
+							.SelectionMode(ESelectionMode::SingleToggle)
 							.HeaderRow
 							(
 								SNew(SHeaderRow)
 								+ SHeaderRow::Column(STextureBakerOutputDeclListItem::NAME_OutputButtons)
 								.DefaultLabel(LOCTEXT("OutputButtons", ""))
-								.FillWidth(.05f)
+								.ManualWidth(18.0f)
 								+ SHeaderRow::Column(STextureBakerOutputDeclListItem::NAME_OutputName)
 								.DefaultLabel(LOCTEXT("OutputName", "Output name"))
-								.FillWidth(.10f)
+								.FillWidth(.33f)
 								+ SHeaderRow::Column(STextureBakerOutputDeclListItem::NAME_OutputPath)
 								.DefaultLabel(LOCTEXT("OutputPath", "Save path"))
-								.FillWidth(.50f)
+								.FillWidth(.33f)
 								+ SHeaderRow::Column(STextureBakerOutputDeclListItem::NAME_OutputInfo)
 								.DefaultLabel(LOCTEXT("OutputInfo", "Information"))
-								.FillWidth(.35f)
+								.FillWidth(.33f)
 							)
 						]
 					]
@@ -433,12 +433,12 @@ void STextureBakerScenarioWidget::UpdateClassTemplate(UClass* TargetClass)
 void STextureBakerScenarioWidget::UpdateOutputInfo()
 {
 	RegisteredOutputDecls.Empty();
-	TArray<FTextureBakerOutputWriteout> Outputs;
+	FTextureBakerOutputList Outputs;
 	if (TextureBakerScenarioTemplate && VerifyOutputPath(OutputDirectoryPath))
 	{
 		TextureBakerScenarioTemplate->RegisterOutputTarget(OutputDirectoryPath, Outputs);
 	}
-	for (FTextureBakerOutputWriteout& Writeout : Outputs)
+	for (const FTextureBakerOutputWriteout& Writeout : Outputs.GetTextureOutputs())
 	{
 		FString OutputRelativePath = Writeout.OutputAssetPath;
 		FPaths::MakePathRelativeTo(OutputRelativePath, *OutputDirectoryPath);
@@ -500,12 +500,64 @@ FText STextureBakerOutputDeclListItem::GetOutputInfo() const
 	return OutputDecl.IsValid() ? OutputDecl->GetOutputInfo() : FText();
 }
 
+bool STextureBakerOutputDeclListItem::CanBeModified() const
+{
+	return OutputDecl.IsValid();
+}
+
+ECheckBoxState STextureBakerOutputDeclListItem::GetCheckedState() const
+{
+	if (OutputDecl.IsValid())
+	{
+		return OutputDecl->IsOutputEnabled() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+	}
+	return ECheckBoxState::Undetermined;
+}
+
+void STextureBakerOutputDeclListItem::CycleCheckedState(ECheckBoxState InCheckboxState)
+{
+	if (OutputDecl.IsValid())
+	{
+		OutputDecl->SetOutputEnabled(InCheckboxState == ECheckBoxState::Checked);
+	}
+}
+
+const FSlateBrush* STextureBakerOutputDeclListItem::GetCurrentOutputIcon() const
+{
+	if (OutputDecl.IsValid())
+	{
+		return FSlateIconFinder::FindCustomIconBrushForClass(UTexture2D::StaticClass(), TEXT("ClassIcon"));
+	}
+	return FSlateIconFinder::FindIcon("ClassIcon.Deleted").GetIcon();
+}
+
 TSharedRef<SWidget> STextureBakerOutputDeclListItem::GenerateWidgetForColumn(const FName& ColumnName)
 {
-	if (ColumnName == NAME_OutputName)
+	if (ColumnName == NAME_OutputButtons)
 	{
 		return SNew(SHorizontalBox)
-
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.Padding(0.0f, 0.0f)
+			.VAlign(VAlign_Center)
+			[
+				SNew(SCheckBox)
+				.Style(FCoreStyle::Get(), "Checkbox")
+				.IsEnabled(this, &STextureBakerOutputDeclListItem::CanBeModified)
+				.IsChecked(this, &STextureBakerOutputDeclListItem::GetCheckedState)
+				.OnCheckStateChanged(this, &STextureBakerOutputDeclListItem::CycleCheckedState)
+			];
+	}
+	else if (ColumnName == NAME_OutputName)
+	{
+		return SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			[
+				SNew(SImage)
+				.Image(this, &STextureBakerOutputDeclListItem::GetCurrentOutputIcon)
+			]
 			+ SHorizontalBox::Slot()
 			.AutoWidth()
 			.Padding(0.0f, 0.0f)
