@@ -159,7 +159,7 @@ UTexture2D* FTextureBakerRenderContext::GetOrCreateDerivedArt(UTexture2D* Source
 		{
 			OutTexture->MipGenSettings = (Options.MipGenSettings == TextureMipGenSettings::TMGS_LeaveExistingMips) ? Source->MipGenSettings : Options.MipGenSettings;
 			OutTexture->CompressionNone = Options.bRequireUncompressed || Source->CompressionNone;
-			OutTexture->CompressionSettings = Options.bRequireUncompressed ? TextureCompressionSettings::TC_Default : Source->CompressionSettings;
+			OutTexture->CompressionSettings = Options.bRequireUncompressed ? TextureCompressionSettings::TC_Default : Source->CompressionSettings.GetValue();
 			OutTexture->AddressX = Source->AddressX;
 			OutTexture->AddressY = Source->AddressY;
 			OutTexture->bFlipGreenChannel = Source->bFlipGreenChannel;
